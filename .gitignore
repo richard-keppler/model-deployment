@@ -129,7 +129,8 @@ celerybeat.pid
 .venv/
 .uv/
 mlruns/
-artifacts/
+artifacts/*
+!artifacts/model/
 env/
 venv/
 ENV/
