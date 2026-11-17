@@ -172,3 +172,7 @@ cython_debug/
 
 # raw data
 /data
+
+# mlflow data
+/mlartifacts
+mlflow.db
