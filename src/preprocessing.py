@@ -5,6 +5,12 @@ FEATURES = ["PULocationID", "DOLocationID", "trip_distance", "pickup_hour", "pic
 TARGET = "duration"
 
 
+def convert_hour_weekday(df):
+    df["pickup_hour"] = df["tpep_pickup_datetime"].dt.hour
+    df["pickup_dayofweek"] = df["tpep_pickup_datetime"].dt.day_of_week
+    return df
+
+
 def clean_data(dataframe):
     drop_columns = ["VendorID", "passenger_count", "store_and_fwd_flag"]
     df = dataframe.drop(columns=drop_columns)
@@ -15,8 +21,7 @@ def clean_data(dataframe):
     df = df[df["duration"].between(1, 60)]
     df = df[df["fare_amount"] >= 0]
     df = df[df["trip_distance"] / (df["duration"] / 60) < 80]
-    df["pickup_hour"] = df["tpep_pickup_datetime"].dt.hour
-    df["pickup_dayofweek"] = df["tpep_pickup_datetime"].dt.dayofweek
+    df = convert_hour_weekday(df)
     df = df[FEATURES + [TARGET]]
     return df
 
