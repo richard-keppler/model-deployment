@@ -62,6 +62,7 @@ Invalid input returns HTTP `422` with a description of the problem.
 | `src/data.py` | Downloads and loads the raw parquet data |
 | `src/preprocessing.py` | Cleans the data, builds features, splits train/test |
 | `src/train.py` | Trains the Random Forest and a baseline, logs the run to MLflow |
+| `src/tune.py` | Hyperparameter tuning with Optuna, every trial logged as a nested MLflow run |
 | `src/model.py` | Loads the model from MLflow or a local folder (via `MODEL_URI`) |
 | `app/main.py` | FastAPI app with `/` (health check) and `/predict` |
 | `artifacts/model/` | Exported model used by the Docker image |
@@ -100,7 +101,17 @@ uv run python -m src.train
 This downloads the data (if not already present), cleans it, trains the Random Forest
 and a mean baseline, and logs parameters, metrics and the model to MLflow.
 
-### 3. Run the API
+### 3. (Optional) Tune hyperparameters with Optuna
+
+```bash
+uv run python -m src.tune
+```
+
+Runs 20 Optuna trials over `n_estimators`, `max_depth` and `min_samples_leaf`.
+All trials are logged as nested runs under an `optuna-study` run in MLflow,
+and the best configuration is retrained and logged as `best-model`.
+
+### 4. Run the API
 
 ```bash
 uv run uvicorn app.main:app --reload --port 8000
@@ -113,7 +124,7 @@ To load it from the local folder instead (no MLflow server needed):
 MODEL_URI=artifacts/model uv run uvicorn app.main:app --port 8000
 ```
 
-### 4. Send a request
+### 5. Send a request
 
 ```bash
 curl -X POST http://localhost:8000/predict \
@@ -162,24 +173,36 @@ To ship a newly trained model, copy the model folder of the desired run from `ml
 The trees are kept shallow and each tree only sees 10 % of the training data so that training
 fits into 8 GB RAM on a MacBook Air (M1) and the model stays small (6.6 MB) for deployment.
 
-| Model | Test RMSE (minutes) |
-|---|---|
-| Baseline (always predicts the training mean) | 9.77 |
-| Random Forest | **4.39** |
+| Model | Test RMSE (minutes) | Model size |
+|---|---|---|
+| Baseline (always predicts the training mean) | 9.77 | – |
+| Random Forest (deployed) | **4.39** | 6.6 MB |
+| Random Forest tuned with Optuna (not deployed) | 4.06 | 113 MB |
 
 The Random Forest reduces the error by about 55 % compared to the baseline.
+
+### Hyperparameter tuning with Optuna
+
+20 Optuna trials searched `n_estimators` (20–100), `max_depth` (5–20) and `min_samples_leaf` (5–50),
+with `max_samples=0.1` fixed. The best trial used `n_estimators=50`, `max_depth=19`, `min_samples_leaf=9`
+and reached a test RMSE of **4.06 minutes**, about 7.6 % better than the deployed model.
+
+**Was the extra complexity worth it?** Not for this deployment. The deeper trees make the model
+17 times larger (113 MB), which exceeds GitHub's 100 MB file limit and is risky for the ~512 MB RAM
+of the free Render instance, while the prediction only improves by about 20 seconds on average.
+The smaller model is therefore kept in production; the tuned model stays in MLflow.
 
 ## Questions
 
 ### 1. What is the RMSE of your final model?
 
-The final Random Forest reaches a **test RMSE of 4.39 minutes**
-(baseline: 9.77 minutes).
+The deployed Random Forest reaches a **test RMSE of 4.39 minutes** (baseline: 9.77 minutes).
+The best Optuna configuration reaches **4.06 minutes**, but was not deployed because of its size (see above).
 
 ### 2. What would you do differently if you had more time?
 
-- **Hyperparameter tuning** with Optuna (`max_depth`, `min_samples_leaf`, `n_estimators`,
-  `max_samples`), logging every trial to MLflow, and checking whether the gain justifies a larger model.
+- **Size-aware tuning**: optimise RMSE and model size together (multi-objective Optuna study),
+  include `max_samples` in the search and run more trials.
 - **Use more of the training data**: each tree currently sees only 10 % of the data because of memory limits.
 - **Better features**: treat the zone IDs as categories (or use the zone-to-borough mapping),
   add the pickup–dropoff zone pair, holidays and rush-hour flags.
