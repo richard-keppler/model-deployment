@@ -63,6 +63,7 @@ Invalid input returns HTTP `422` with a description of the problem.
 | `src/preprocessing.py` | Cleans the data, builds features, splits train/test |
 | `src/train.py` | Trains the Random Forest and a baseline, logs the run to MLflow |
 | `src/tune.py` | Hyperparameter tuning with Optuna, every trial logged as a nested MLflow run |
+| `src/grid_search.py` | Hyperparameter tuning with `GridSearchCV` (12 combinations, 3-fold cross-validation), logged to MLflow |
 | `src/model.py` | Loads the model from MLflow or a local folder (via `MODEL_URI`) |
 | `app/main.py` | FastAPI app with `/` (health check) and `/predict` |
 | `artifacts/model/` | Exported model used by the Docker image |
@@ -110,6 +111,16 @@ uv run python -m src.tune
 Runs 20 Optuna trials over `n_estimators`, `max_depth` and `min_samples_leaf`.
 All trials are logged as nested runs under an `optuna-study` run in MLflow,
 and the best configuration is retrained and logged as `best-model`.
+
+As an alternative, an exhaustive grid search with `GridSearchCV`:
+
+```bash
+uv run python -m src.grid_search
+```
+
+It tries 12 combinations with 3-fold cross-validation on the training data and logs the best
+configuration, its cross-validated RMSE (`CV_RMSE`), the test RMSE and the model as a `best-model` run
+nested under a `grid-search` run.
 
 ### 4. Run the API
 
@@ -178,6 +189,7 @@ fits into 8 GB RAM on a MacBook Air (M1) and the model stays small (6.6 MB) for 
 | Baseline (always predicts the training mean) | 9.77 | – |
 | Random Forest (deployed) | **4.39** | 6.6 MB |
 | Random Forest tuned with Optuna (not deployed) | 4.06 | 113 MB |
+| Random Forest tuned with grid search (not deployed) | 4.01 | 199 MB |
 
 The Random Forest reduces the error by about 55 % compared to the baseline.
 
@@ -192,12 +204,26 @@ and reached a test RMSE of **4.06 minutes**, about 7.6 % better than the deploye
 of the free Render instance, while the prediction only improves by about 20 seconds on average.
 The smaller model is therefore kept in production; the tuned model stays in MLflow.
 
+### Hyperparameter tuning with grid search
+
+As a comparison, `GridSearchCV` tried every combination of `n_estimators` (20, 50), `max_depth` (10, 20)
+and `min_samples_leaf` (5, 10, 25), again with `max_samples=0.1` fixed. Unlike the Optuna study, the
+configuration is selected with 3-fold cross-validation on the training data, so the test set is only used
+for the final evaluation. The run took about 3 minutes and used at most about 1 GB of RAM.
+
+The best combination was `n_estimators=50`, `max_depth=20`, `min_samples_leaf=5` with a cross-validated
+RMSE of 4.06 and a **test RMSE of 4.01 minutes**, slightly better than Optuna. The similar CV and test
+errors show that the model does not overfit the test set. However, both `max_depth` and `min_samples_leaf`
+ended up at the edge of the grid, so the optimum probably lies beyond it, at even deeper trees.
+The model is already 199 MB, so the same conclusion holds: it is not deployed.
+
 ## Questions
 
 ### 1. What is the RMSE of your final model?
 
 The deployed Random Forest reaches a **test RMSE of 4.39 minutes** (baseline: 9.77 minutes).
-The best Optuna configuration reaches **4.06 minutes**, but was not deployed because of its size (see above).
+The best Optuna configuration reaches **4.06 minutes** and the best grid search configuration **4.01 minutes**,
+but neither was deployed because of their size (see above).
 
 ### 2. What would you do differently if you had more time?
 
