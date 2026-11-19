@@ -1,8 +1,5 @@
 import os
-
-# Must be set before importing the app: src/model.py reads MODEL_URI at import time.
 os.environ["MODEL_URI"] = "artifacts/model"
-
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -17,7 +14,6 @@ VALID_REQUEST = {
 
 @pytest.fixture(scope="module")
 def client():
-    # The "with" block runs the lifespan, which loads the model.
     with TestClient(app) as client:
         yield client
 
