@@ -66,6 +66,7 @@ Invalid input returns HTTP `422` with a description of the problem.
 | `src/grid_search.py` | Hyperparameter tuning with `GridSearchCV` (12 combinations, 3-fold cross-validation), logged to MLflow |
 | `src/model.py` | Loads the model from MLflow or a local folder (via `MODEL_URI`) |
 | `app/main.py` | FastAPI app with `/` (health check) and `/predict` |
+| `tests/test_api.py` | API tests with FastAPI `TestClient` (health check, valid and invalid requests) |
 | `artifacts/model/` | Exported model used by the Docker image |
 | `sample-request.json` | Example request body |
 | `Dockerfile` | Container image for the API |
@@ -142,6 +143,16 @@ curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d @sample-request.json
 ```
+
+### 6. Run the tests
+
+```bash
+uv run pytest -v
+```
+
+The API tests load the model from `artifacts/model/`, so no MLflow server is needed.
+They check the health check, a valid prediction (plausible value between 1 and 60 minutes)
+and that eight kinds of invalid input are rejected with HTTP `422`.
 
 ## Running with Docker
 
@@ -234,7 +245,8 @@ but neither was deployed because of their size (see above).
   add the pickup–dropoff zone pair, holidays and rush-hour flags.
 - **Try other models** such as gradient boosting (e.g. `HistGradientBoostingRegressor`),
   which is usually faster and more accurate on tabular data.
-- **Tests** for preprocessing, model loading and the API (FastAPI `TestClient`).
+- **More tests**: the API is tested, but the data cleaning, feature engineering and model loading
+  in `src/` are not covered yet.
 - **Slimmer Docker image**: split training-only dependencies (plotly, seaborn, optuna,
   great-expectations) from the API dependencies and load the model without MLflow.
 - **Model registry instead of committing the model**: use the MLflow Model Registry or cloud storage
